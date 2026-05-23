@@ -20,7 +20,9 @@ COINS = {
 COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
 CURRENCY = "usd"
 REFRESH_INTERVAL_MS = 10_000
-MAX_DATA_POINTS = 90
+# Keep a readable rolling window for each coin. At 10-second polling, 90 points
+# per coin gives enough history for the 5-minute BTC alert calculation.
+MAX_DATA_POINTS_PER_COIN = 90
 BTC_ALERT_DROP_THRESHOLD = -2.0
 BTC_ALERT_LOOKBACK_MINUTES = 5
 
@@ -79,7 +81,7 @@ def create_empty_data_frame() -> pd.DataFrame:
 
 
 def normalize_recent_data(data: pd.DataFrame) -> pd.DataFrame:
-    """Keep expected columns and trim to the latest observations."""
+    """Keep expected columns and trim to the latest observations per coin."""
     expected_columns = ["timestamp", "coin", "symbol", "price_usd"]
     if data.empty:
         return create_empty_data_frame()
@@ -89,7 +91,11 @@ def normalize_recent_data(data: pd.DataFrame) -> pd.DataFrame:
     normalized["price_usd"] = pd.to_numeric(normalized["price_usd"], errors="coerce")
     normalized = normalized.dropna(subset=["timestamp", "coin", "symbol", "price_usd"])
 
-    return normalized.sort_values("timestamp").tail(MAX_DATA_POINTS)
+    return (
+        normalized.sort_values("timestamp")
+        .groupby("symbol", group_keys=False)
+        .tail(MAX_DATA_POINTS_PER_COIN)
+    )
 
 
 def append_observation(
@@ -152,7 +158,11 @@ def get_btc_drop_percent(recent_data: pd.DataFrame) -> float | None:
     return ((current_price - previous_price) / previous_price) * 100
 
 
-def render_status(connection_ok: bool, error_message: str | None, timestamp: datetime) -> None:
+def render_status(
+    connection_ok: bool,
+    error_message: str | None,
+    timestamp: datetime,
+) -> None:
     """Render connection status and last update information."""
     status_column, time_column = st.columns(2)
 
@@ -256,9 +266,9 @@ def main() -> None:
 
     st.title("Real-Time Crypto Monitoring Dashboard")
     st.write(
-        "Live USD prices for Bitcoin, Ethereum, and Solana from the CoinGecko "
-        "simple price API. The dashboard refreshes every 10 seconds and keeps "
-        "a rolling window of recent observations."
+        "Live USD prices for Bitcoin, Ethereum, and Solana from the free "
+        "CoinGecko REST simple price API. The dashboard polls every 10 seconds "
+        "and keeps a rolling window of recent observations."
     )
 
     recent_data, connection_ok, error_message, timestamp = update_live_data()
