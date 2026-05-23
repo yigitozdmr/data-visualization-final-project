@@ -13,9 +13,11 @@ from collections import defaultdict
 from pathlib import Path
 
 import community as community_louvain
+import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 import requests
+from pyvis.network import Network
 
 
 REPOSITORIES = [
@@ -42,6 +44,8 @@ OUTPUTS_DIR = TRACK_A_DIR / "outputs"
 RAW_CONTRIBUTORS_PATH = DATA_DIR / "raw_contributors.csv"
 EDGE_LIST_PATH = DATA_DIR / "edge_list.csv"
 NODE_TABLE_PATH = DATA_DIR / "node_table.csv"
+HTML_OUTPUT_PATH = OUTPUTS_DIR / "github_network.html"
+PNG_OUTPUT_PATH = OUTPUTS_DIR / "github_network.png"
 
 
 def create_directories() -> None:
@@ -291,8 +295,141 @@ def print_network_summary(graph: nx.Graph, node_df: pd.DataFrame) -> None:
         print(f"- {row.developer}: {row.betweenness_centrality:.4f}")
 
 
+def get_community_color(community: int) -> str:
+    """Return a consistent color for each Louvain community."""
+    color_palette = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+    return color_palette[community % len(color_palette)]
+
+
+def create_interactive_visualization(graph: nx.Graph, node_df: pd.DataFrame) -> None:
+    """Create an interactive PyVis network visualization."""
+    node_lookup = node_df.set_index("developer").to_dict(orient="index")
+    top_label_developers = set(node_df.nlargest(5, "degree_centrality")["developer"])
+
+    network = Network(
+        height="800px",
+        width="100%",
+        bgcolor="#ffffff",
+        font_color="#222222",
+        notebook=False,
+    )
+
+    # Force-directed layouts help reveal community separation and bridge nodes.
+    network.force_atlas_2based(
+        gravity=-50,
+        central_gravity=0.01,
+        spring_length=130,
+        spring_strength=0.08,
+        damping=0.4,
+    )
+
+    for developer in graph.nodes:
+        node_data = node_lookup.get(developer, {})
+        degree_centrality = float(node_data.get("degree_centrality", 0.0))
+        community = int(node_data.get("community", 0))
+        label = developer if developer in top_label_developers else ""
+        size = 8 + (degree_centrality * 60)
+        tooltip = (
+            f"<b>{developer}</b><br>"
+            f"Community: {community}<br>"
+            f"Degree: {int(node_data.get('degree', 0))}<br>"
+            f"Degree centrality: {degree_centrality:.4f}<br>"
+            "Betweenness centrality: "
+            f"{float(node_data.get('betweenness_centrality', 0.0)):.4f}<br>"
+            f"Repositories: {node_data.get('repositories', '')}"
+        )
+
+        network.add_node(
+            developer,
+            label=label,
+            title=tooltip,
+            size=size,
+            color=get_community_color(community),
+        )
+
+    for source, target, edge_data in graph.edges(data=True):
+        weight = int(edge_data.get("weight", 1))
+        network.add_edge(
+            source,
+            target,
+            value=weight,
+            width=weight,
+            title=f"Shared repositories: {edge_data.get('shared_repositories', '')}",
+        )
+
+    network.write_html(str(HTML_OUTPUT_PATH), notebook=False)
+    print(f"Saved interactive visualization to {HTML_OUTPUT_PATH}")
+
+
+def create_static_visualization(graph: nx.Graph, node_df: pd.DataFrame) -> None:
+    """Create a static Matplotlib and NetworkX PNG visualization."""
+    node_lookup = node_df.set_index("developer").to_dict(orient="index")
+    top_label_developers = set(node_df.nlargest(5, "degree_centrality")["developer"])
+
+    # Force-directed layout positions connected communities near each other and
+    # helps highlight developers who bridge otherwise separate groups.
+    positions = nx.spring_layout(graph, weight="weight", seed=42, k=0.35)
+
+    node_sizes = [
+        80 + (float(node_lookup.get(node, {}).get("degree_centrality", 0.0)) * 1200)
+        for node in graph.nodes
+    ]
+    node_colors = [
+        get_community_color(int(node_lookup.get(node, {}).get("community", 0)))
+        for node in graph.nodes
+    ]
+    edge_widths = [
+        0.3 + (0.5 * int(edge_data.get("weight", 1)))
+        for _, _, edge_data in graph.edges(data=True)
+    ]
+    labels = {developer: developer for developer in top_label_developers}
+
+    plt.figure(figsize=(16, 12))
+    nx.draw_networkx_edges(
+        graph,
+        positions,
+        alpha=0.15,
+        edge_color="#555555",
+        width=edge_widths,
+    )
+    nx.draw_networkx_nodes(
+        graph,
+        positions,
+        node_size=node_sizes,
+        node_color=node_colors,
+        alpha=0.9,
+        linewidths=0.4,
+        edgecolors="#ffffff",
+    )
+    nx.draw_networkx_labels(
+        graph,
+        positions,
+        labels=labels,
+        font_size=9,
+        font_weight="bold",
+    )
+
+    plt.title("GitHub Developer Network", fontsize=16)
+    plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(PNG_OUTPUT_PATH, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved static visualization to {PNG_OUTPUT_PATH}")
+
+
 def main() -> None:
-    """Run Track A data collection, table creation, and network analysis."""
+    """Run Track A data collection, analysis, and visualization."""
     print("Starting Track A GitHub contributor data collection...")
     create_directories()
     contributors_df = collect_github_data()
@@ -316,7 +453,11 @@ def main() -> None:
     print(f"Updated node analysis metrics in {NODE_TABLE_PATH}")
     print_network_summary(graph, analyzed_node_table_df)
 
-    print("Track A data collection and network analysis complete.")
+    print("Creating Track A visualizations...")
+    create_interactive_visualization(graph, analyzed_node_table_df)
+    create_static_visualization(graph, analyzed_node_table_df)
+
+    print("Track A data collection, network analysis, and visualization complete.")
 
 
 if __name__ == "__main__":
