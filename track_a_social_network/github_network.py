@@ -1,7 +1,7 @@
-"""Collect contributor data for Track A: Social Network Visualization.
+"""Track A: GitHub developer network collection, analysis, and visualization.
 
-This stage only collects and saves raw contributor data. Graph construction
-and visualization will be implemented later.
+This script uses a real GitHub REST API dataset from selected open-source
+repositories. It does not use a toy network such as Zachary Karate Club.
 """
 
 from __future__ import annotations
@@ -168,7 +168,9 @@ def build_edge_list(contributors_df: pd.DataFrame) -> pd.DataFrame:
     """Build developer-developer edges from shared repository contributions."""
     shared_repositories_by_pair: dict[tuple[str, str], set[str]] = defaultdict(set)
 
-    # Treat the raw data as Developer -> Repository, then project developers.
+    # First model the data as a bipartite relationship: Developer -> Repository.
+    # Then project it into a developer-developer network: two developers are
+    # connected when they contributed to at least one same repository.
     for repository, repo_group in contributors_df.groupby("repository"):
         developers = sorted(repo_group["developer"].dropna().unique())
 
@@ -338,7 +340,9 @@ def create_interactive_visualization(graph: nx.Graph, node_df: pd.DataFrame) -> 
         node_data = node_lookup.get(developer, {})
         degree_centrality = float(node_data.get("degree_centrality", 0.0))
         community = int(node_data.get("community", 0))
+        # Only label the top five nodes to keep the network readable.
         label = developer if developer in top_label_developers else ""
+        # Community controls color, while degree centrality controls node size.
         size = 8 + (degree_centrality * 60)
         tooltip = (
             f"<b>{developer}</b><br>"
@@ -364,6 +368,7 @@ def create_interactive_visualization(graph: nx.Graph, node_df: pd.DataFrame) -> 
             source,
             target,
             value=weight,
+            # Edge width represents the number of shared repositories.
             width=weight,
             title=f"Shared repositories: {edge_data.get('shared_repositories', '')}",
         )
@@ -382,17 +387,21 @@ def create_static_visualization(graph: nx.Graph, node_df: pd.DataFrame) -> None:
     positions = nx.spring_layout(graph, weight="weight", seed=42, k=0.35)
 
     node_sizes = [
+        # Larger nodes indicate higher degree centrality.
         80 + (float(node_lookup.get(node, {}).get("degree_centrality", 0.0)) * 1200)
         for node in graph.nodes
     ]
     node_colors = [
+        # Node color encodes the Louvain community assignment.
         get_community_color(int(node_lookup.get(node, {}).get("community", 0)))
         for node in graph.nodes
     ]
     edge_widths = [
+        # Thicker edges indicate developers who share more repositories.
         0.3 + (0.5 * int(edge_data.get("weight", 1)))
         for _, _, edge_data in graph.edges(data=True)
     ]
+    # Label only the top five developers by degree centrality to avoid clutter.
     labels = {developer: developer for developer in top_label_developers}
 
     plt.figure(figsize=(16, 12))
