@@ -12,6 +12,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+import community as community_louvain
+import networkx as nx
 import pandas as pd
 import requests
 
@@ -218,8 +220,79 @@ def build_node_table(contributors_df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def create_graph(edge_df: pd.DataFrame) -> nx.Graph:
+    """Create an undirected weighted developer graph from the edge list."""
+    graph = nx.Graph()
+
+    for row in edge_df.itertuples(index=False):
+        graph.add_edge(
+            row.source,
+            row.target,
+            weight=int(row.weight),
+            shared_repositories=row.shared_repositories,
+        )
+
+    return graph
+
+
+def analyze_graph(graph: nx.Graph, node_df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate graph metrics and append them to the node table."""
+    for developer in node_df["developer"]:
+        graph.add_node(developer)
+
+    degree_by_developer = dict(graph.degree())
+    degree_centrality = nx.degree_centrality(graph)
+    betweenness_centrality = nx.betweenness_centrality(graph)
+
+    if graph.number_of_edges() > 0:
+        communities = community_louvain.best_partition(
+            graph,
+            weight="weight",
+            random_state=42,
+        )
+    else:
+        communities = {developer: 0 for developer in graph.nodes}
+
+    analyzed_node_df = node_df.copy()
+    analyzed_node_df["degree"] = analyzed_node_df["developer"].map(
+        degree_by_developer
+    )
+    analyzed_node_df["degree_centrality"] = analyzed_node_df["developer"].map(
+        degree_centrality
+    )
+    analyzed_node_df["betweenness_centrality"] = analyzed_node_df["developer"].map(
+        betweenness_centrality
+    )
+    analyzed_node_df["community"] = analyzed_node_df["developer"].map(communities)
+
+    return analyzed_node_df.sort_values(
+        by=["degree_centrality", "betweenness_centrality", "developer"],
+        ascending=[False, False, True],
+    )
+
+
+def print_network_summary(graph: nx.Graph, node_df: pd.DataFrame) -> None:
+    """Print a concise summary of the analyzed developer network."""
+    community_count = node_df["community"].nunique()
+    top_degree = node_df.nlargest(5, "degree_centrality")
+    top_betweenness = node_df.nlargest(5, "betweenness_centrality")
+
+    print("Network analysis summary:")
+    print(f"Number of nodes: {graph.number_of_nodes()}")
+    print(f"Number of edges: {graph.number_of_edges()}")
+    print(f"Number of communities: {community_count}")
+
+    print("Top 5 developers by degree centrality:")
+    for row in top_degree.itertuples(index=False):
+        print(f"- {row.developer}: {row.degree_centrality:.4f}")
+
+    print("Top 5 developers by betweenness centrality:")
+    for row in top_betweenness.itertuples(index=False):
+        print(f"- {row.developer}: {row.betweenness_centrality:.4f}")
+
+
 def main() -> None:
-    """Run Track A data collection and developer network table creation."""
+    """Run Track A data collection, table creation, and network analysis."""
     print("Starting Track A GitHub contributor data collection...")
     create_directories()
     contributors_df = collect_github_data()
@@ -234,7 +307,16 @@ def main() -> None:
     node_table_df.to_csv(NODE_TABLE_PATH, index=False)
     print(f"Saved {len(node_table_df)} nodes to {NODE_TABLE_PATH}")
 
-    print("Track A data collection and network table creation complete.")
+    print("Analyzing developer network...")
+    edge_list_df = pd.read_csv(EDGE_LIST_PATH)
+    node_table_df = pd.read_csv(NODE_TABLE_PATH)
+    graph = create_graph(edge_list_df)
+    analyzed_node_table_df = analyze_graph(graph, node_table_df)
+    analyzed_node_table_df.to_csv(NODE_TABLE_PATH, index=False)
+    print(f"Updated node analysis metrics in {NODE_TABLE_PATH}")
+    print_network_summary(graph, analyzed_node_table_df)
+
+    print("Track A data collection and network analysis complete.")
 
 
 if __name__ == "__main__":
