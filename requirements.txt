@@ -1,0 +1,9 @@
+pandas
+networkx
+matplotlib
+pyvis
+python-louvain
+requests
+streamlit
+plotly
+streamlit-autorefresh
