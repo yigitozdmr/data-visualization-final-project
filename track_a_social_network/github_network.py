@@ -6,8 +6,10 @@ and visualization will be implemented later.
 
 from __future__ import annotations
 
+import itertools
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -28,11 +30,16 @@ REQUEST_TIMEOUT_SECONDS = 30
 MAX_RETRY_ATTEMPTS = 3
 RETRY_WAIT_SECONDS = 3
 
+# Increase this to 2 if the developer-developer network becomes too dense.
+MIN_EDGE_WEIGHT = 1
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TRACK_A_DIR = PROJECT_ROOT / "track_a_social_network"
 DATA_DIR = TRACK_A_DIR / "data"
 OUTPUTS_DIR = TRACK_A_DIR / "outputs"
 RAW_CONTRIBUTORS_PATH = DATA_DIR / "raw_contributors.csv"
+EDGE_LIST_PATH = DATA_DIR / "edge_list.csv"
+NODE_TABLE_PATH = DATA_DIR / "node_table.csv"
 
 
 def create_directories() -> None:
@@ -151,12 +158,83 @@ def collect_github_data() -> pd.DataFrame:
     return contributors_df
 
 
+def build_edge_list(contributors_df: pd.DataFrame) -> pd.DataFrame:
+    """Build developer-developer edges from shared repository contributions."""
+    shared_repositories_by_pair: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    # Treat the raw data as Developer -> Repository, then project developers.
+    for repository, repo_group in contributors_df.groupby("repository"):
+        developers = sorted(repo_group["developer"].dropna().unique())
+
+        for source, target in itertools.combinations(developers, 2):
+            shared_repositories_by_pair[(source, target)].add(repository)
+
+    edge_rows: list[dict[str, object]] = []
+    for (source, target), repositories in shared_repositories_by_pair.items():
+        shared_repositories = sorted(repositories)
+        weight = len(shared_repositories)
+
+        if weight < MIN_EDGE_WEIGHT:
+            continue
+
+        edge_rows.append(
+            {
+                "source": source,
+                "target": target,
+                "weight": weight,
+                "shared_repositories": "; ".join(shared_repositories),
+            }
+        )
+
+    edge_list_df = pd.DataFrame(
+        edge_rows,
+        columns=["source", "target", "weight", "shared_repositories"],
+    )
+
+    if not edge_list_df.empty:
+        edge_list_df = edge_list_df.sort_values(
+            by=["weight", "source", "target"],
+            ascending=[False, True, True],
+        )
+
+    return edge_list_df
+
+
+def build_node_table(contributors_df: pd.DataFrame) -> pd.DataFrame:
+    """Build developer-level metadata for the projected network nodes."""
+    node_table_df = (
+        contributors_df.groupby("developer")
+        .agg(
+            repositories=("repository", lambda values: "; ".join(sorted(set(values)))),
+            repository_count=("repository", "nunique"),
+            total_contributions=("contributions", "sum"),
+        )
+        .reset_index()
+    )
+
+    return node_table_df.sort_values(
+        by=["repository_count", "total_contributions", "developer"],
+        ascending=[False, False, True],
+    )
+
+
 def main() -> None:
-    """Run the Track A data collection workflow."""
+    """Run Track A data collection and developer network table creation."""
     print("Starting Track A GitHub contributor data collection...")
     create_directories()
-    collect_github_data()
-    print("Track A data collection complete.")
+    contributors_df = collect_github_data()
+
+    print("Building developer-developer edge list...")
+    edge_list_df = build_edge_list(contributors_df)
+    edge_list_df.to_csv(EDGE_LIST_PATH, index=False)
+    print(f"Saved {len(edge_list_df)} edges to {EDGE_LIST_PATH}")
+
+    print("Building developer node table...")
+    node_table_df = build_node_table(contributors_df)
+    node_table_df.to_csv(NODE_TABLE_PATH, index=False)
+    print(f"Saved {len(node_table_df)} nodes to {NODE_TABLE_PATH}")
+
+    print("Track A data collection and network table creation complete.")
 
 
 if __name__ == "__main__":
