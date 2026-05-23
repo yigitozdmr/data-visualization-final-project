@@ -19,12 +19,15 @@ COINS = {
 }
 COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
 CURRENCY = "usd"
-REFRESH_INTERVAL_MS = 10_000
-# Keep a readable rolling window for each coin. At 10-second polling, 90 points
-# per coin gives enough history for the 5-minute BTC alert calculation.
-MAX_DATA_POINTS_PER_COIN = 90
+# Polling every 30 seconds reduces CoinGecko rate-limit risk while remaining
+# frequent enough for a student real-time dashboard.
+REFRESH_INTERVAL_MS = 30_000
+# Keep about 15 minutes of data per coin: 30 points * 30 seconds.
+MAX_DATA_POINTS_PER_COIN = 30
 BTC_ALERT_DROP_THRESHOLD = -2.0
 BTC_ALERT_LOOKBACK_MINUTES = 5
+# With 30-second polling, 10 intervals is approximately 5 minutes.
+BTC_ALERT_LOOKBACK_POINTS = 10
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "track_b_realtime_dashboard" / "data"
@@ -38,18 +41,28 @@ def create_data_directory() -> None:
 
 def fetch_live_prices() -> tuple[dict[str, float], str | None]:
     """Fetch current crypto prices from the CoinGecko simple price API."""
+    headers = {"User-Agent": "data-visualization-final-project"}
+
     try:
         response = requests.get(
             COINGECKO_URL,
+            headers=headers,
             params={"ids": ",".join(COINS.keys()), "vs_currencies": CURRENCY},
             timeout=15,
         )
         response.raise_for_status()
         payload = response.json()
+    except requests.exceptions.HTTPError as error:
+        if error.response is not None and error.response.status_code == 429:
+            return (
+                {},
+                "CoinGecko API rate limit reached; showing cached data.",
+            )
+        return {}, f"CoinGecko API request failed; showing cached data. {error}"
     except requests.exceptions.RequestException as error:
-        return {}, f"CoinGecko request failed: {error}"
+        return {}, f"CoinGecko API request failed; showing cached data. {error}"
     except ValueError as error:
-        return {}, f"CoinGecko returned invalid JSON: {error}"
+        return {}, f"CoinGecko returned invalid JSON; showing cached data. {error}"
 
     prices: dict[str, float] = {}
     for coin_id, symbol in COINS.items():
@@ -137,20 +150,14 @@ def get_latest_prices(recent_data: pd.DataFrame) -> dict[str, float]:
 
 
 def get_btc_drop_percent(recent_data: pd.DataFrame) -> float | None:
-    """Compare current BTC price to the closest observation about five minutes ago."""
+    """Compare current BTC price to the observation about five minutes ago."""
     btc_data = recent_data[recent_data["symbol"] == "BTC"].sort_values("timestamp")
-    if len(btc_data) < 2:
+    if len(btc_data) <= BTC_ALERT_LOOKBACK_POINTS:
         return None
 
     current_row = btc_data.iloc[-1]
-    target_time = current_row["timestamp"] - pd.Timedelta(
-        minutes=BTC_ALERT_LOOKBACK_MINUTES
-    )
-    historical_data = btc_data[btc_data["timestamp"] <= target_time]
-    if historical_data.empty:
-        return None
-
-    previous_price = float(historical_data.iloc[-1]["price_usd"])
+    previous_row = btc_data.iloc[-(BTC_ALERT_LOOKBACK_POINTS + 1)]
+    previous_price = float(previous_row["price_usd"])
     current_price = float(current_row["price_usd"])
     if previous_price == 0:
         return None
@@ -158,8 +165,20 @@ def get_btc_drop_percent(recent_data: pd.DataFrame) -> float | None:
     return ((current_price - previous_price) / previous_price) * 100
 
 
+def get_display_timestamp(recent_data: pd.DataFrame, fallback_timestamp: datetime) -> datetime:
+    """Use cached data time when API polling fails so freshness stays honest."""
+    if recent_data.empty:
+        return fallback_timestamp
+
+    latest_timestamp = recent_data["timestamp"].max()
+    if pd.isna(latest_timestamp):
+        return fallback_timestamp
+
+    return latest_timestamp.to_pydatetime()
+
+
 def render_status(
-    connection_ok: bool,
+    connection_status: str,
     error_message: str | None,
     timestamp: datetime,
 ) -> None:
@@ -167,10 +186,12 @@ def render_status(
     status_column, time_column = st.columns(2)
 
     with status_column:
-        if connection_ok:
+        if connection_status == "live":
             st.success("Connection status: Live")
         else:
-            st.error("Connection status: API unavailable")
+            # Cached data keeps the dashboard usable when CoinGecko rate limits
+            # or temporary API failures prevent a fresh observation.
+            st.warning("Connection status: Using cached data")
             if error_message:
                 st.caption(error_message)
 
@@ -196,11 +217,17 @@ def render_price_chart(recent_data: pd.DataFrame) -> None:
         st.warning("Waiting for live price data...")
         return
 
+    normalized_data = calculate_percentage_change(recent_data)
+    if normalized_data.empty:
+        st.warning("Waiting for enough valid price data to draw the chart...")
+        return
+
     chart = px.line(
-        recent_data,
+        normalized_data,
         x="timestamp",
-        y="price_usd",
+        y="percentage_change",
         color="symbol",
+        title="Rolling Crypto Price Change (%)",
         color_discrete_map={
             "BTC": "#4c78a8",
             "ETH": "#72b7b2",
@@ -208,7 +235,7 @@ def render_price_chart(recent_data: pd.DataFrame) -> None:
         },
         labels={
             "timestamp": "Time",
-            "price_usd": "Price (USD)",
+            "percentage_change": "Change from window start (%)",
             "symbol": "Coin",
         },
     )
@@ -220,6 +247,23 @@ def render_price_chart(recent_data: pd.DataFrame) -> None:
     )
 
     st.plotly_chart(chart, use_container_width=True)
+
+
+def calculate_percentage_change(recent_data: pd.DataFrame) -> pd.DataFrame:
+    """Normalize prices so BTC, ETH, and SOL can be compared on one chart."""
+    # Raw USD values make ETH and SOL appear almost flat next to BTC. Percentage
+    # change uses each coin's first visible value as the baseline.
+    normalized = recent_data.sort_values(["symbol", "timestamp"]).copy()
+    normalized["baseline_price"] = normalized.groupby("symbol")[
+        "price_usd"
+    ].transform("first")
+    normalized = normalized[normalized["baseline_price"] != 0].copy()
+    normalized["percentage_change"] = (
+        (normalized["price_usd"] - normalized["baseline_price"])
+        / normalized["baseline_price"]
+    ) * 100
+
+    return normalized.drop(columns=["baseline_price"]).sort_values("timestamp")
 
 
 def render_btc_alert(recent_data: pd.DataFrame) -> None:
@@ -244,7 +288,7 @@ def render_btc_alert(recent_data: pd.DataFrame) -> None:
         )
 
 
-def update_live_data() -> tuple[pd.DataFrame, bool, str | None, datetime]:
+def update_live_data() -> tuple[pd.DataFrame, str, str | None, datetime]:
     """Fetch, append, trim, and persist the latest live crypto observations."""
     create_data_directory()
     recent_data = load_recent_data()
@@ -254,9 +298,12 @@ def update_live_data() -> tuple[pd.DataFrame, bool, str | None, datetime]:
     if prices:
         recent_data = append_observation(recent_data, prices, timestamp)
         save_recent_data(recent_data)
-        return recent_data, True, None, timestamp
+        return recent_data, "live", None, timestamp
 
-    return recent_data, False, error_message, timestamp
+    # On API failure, keep and display the existing CSV-backed data instead of
+    # deleting history or crashing the dashboard.
+    cached_timestamp = get_display_timestamp(recent_data, timestamp)
+    return recent_data, "cached", error_message, cached_timestamp
 
 
 def main() -> None:
@@ -267,14 +314,14 @@ def main() -> None:
     st.title("Real-Time Crypto Monitoring Dashboard")
     st.write(
         "Live USD prices for Bitcoin, Ethereum, and Solana from the free "
-        "CoinGecko REST simple price API. The dashboard polls every 10 seconds "
-        "and keeps a rolling window of recent observations."
+        "CoinGecko REST simple price API. The dashboard polls every 30 seconds "
+        "to reduce rate-limit risk and keeps about 15 minutes of recent data."
     )
 
-    recent_data, connection_ok, error_message, timestamp = update_live_data()
+    recent_data, connection_status, error_message, timestamp = update_live_data()
     latest_prices = get_latest_prices(recent_data)
 
-    render_status(connection_ok, error_message, timestamp)
+    render_status(connection_status, error_message, timestamp)
     render_price_metrics(latest_prices)
     render_btc_alert(recent_data)
     render_price_chart(recent_data)
