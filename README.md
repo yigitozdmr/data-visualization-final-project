@@ -1,49 +1,25 @@
 # Data Visualization Final Project
 
-## Overview
+## Group Members
 
-This repository contains a university Data Visualization final project with two required tracks:
+- Student 1: [Yiğit Özdemir]
+- Student 2: [Berzan Uludağ]
+- Student 3: [Berkay Yurttaş]
 
-- **Track A: Social Network Visualization & Community Discovery**
-- **Track B: Real-Time Data Visualization Dashboard**
+## Project Overview
 
-The project uses real API-based datasets and Python visualization tools. Track A analyzes relationships among GitHub developers across multiple open-source repositories. Track B monitors live cryptocurrency prices from CoinGecko in a Streamlit dashboard.
+This project is a university Data Visualization final project that includes both mandatory tracks:
 
-The project is designed for academic evaluation of data collection, visual encoding, interactivity, network analysis, and real-time dashboard design. Results may vary because both tracks depend on live public APIs.
+- Track A: Social Network Visualization & Community Discovery
+- Track B: Real-Time Data Visualization Dashboard
 
-## Assignment Requirements Covered
+Track A analyzes a multi-repository GitHub developer network using contributor data from the GitHub REST API. Track B implements a Streamlit dashboard that monitors live cryptocurrency prices from the CoinGecko API.
 
-Track A covers:
+The project uses real API-based data. Output values may vary depending on live service availability, API rate limits, and the time when the scripts are executed.
 
-- Real-world social network data from the GitHub REST API
-- Multi-repository GitHub developer network construction
-- Developer-developer projected network
-- Edge list and node table generation
-- Degree centrality and betweenness centrality
-- Louvain community detection
-- Community-based node color
-- Degree-centrality-based node size
-- Shared-repository edge weight and edge width
-- Interactive HTML network visualization
-- Static PNG network visualization
+## Track A: Social Network Visualization & Community Discovery
 
-Track B covers:
-
-- Real-time dashboard using Streamlit
-- Live REST API polling with CoinGecko
-- BTC, ETH, and SOL price monitoring in USD
-- 30-second auto-refresh interval
-- Sliding window of approximately the last 15 minutes
-- CSV persistence for recent observations
-- Raw price metric cards
-- Normalized rolling percentage-change chart
-- Connection status and last updated timestamp
-- Cached data fallback if the API fails or rate limits occur
-- BTC alert if price drops more than 2% over approximately 5 minutes
-
-## Track A: GitHub Developer Network
-
-Track A builds a multi-repository GitHub Developer Network from contributor data. The repositories are:
+Track A uses GitHub REST API contributor data from selected open-source repositories, including:
 
 - `django/django`
 - `fastapi/fastapi`
@@ -51,127 +27,97 @@ Track A builds a multi-repository GitHub Developer Network from contributor data
 - `scikit-learn/scikit-learn`
 - `pallets/flask`
 
-The GitHub API can occasionally return timeouts for large repositories. In particular, `pallets/flask` may fail due to a GitHub API timeout. The script handles failures gracefully, saves partial data when at least one repository succeeds, and reports successful and failed repositories.
+The script creates a raw contributor dataset, then models the data as developer-repository relationships. It projects this into a developer-developer network, where two developers are connected if they contributed to at least one same repository.
 
-The data is modeled first as a developer-repository relationship. It is then projected into a developer-developer network where two developers are connected if they contributed to at least one same repository.
+The edge list stores developer pairs, edge weights, and shared repositories. The node table stores developer-level attributes, repository counts, contribution totals, centrality values, and community IDs.
 
-## Track B: Real-Time Crypto Dashboard
+Louvain community detection is applied to identify groups of developers with stronger internal connections. Degree centrality and betweenness centrality are calculated to support analysis of central actors and possible bridge developers.
 
-Track B is a Streamlit dashboard that tracks live cryptocurrency prices from the CoinGecko API:
+Track A outputs:
+
+- `raw_contributors.csv`
+- `edge_list.csv`
+- `node_table.csv`
+- `github_network.html`
+- `github_network.png`
+
+## Track B: Real-Time Data Visualization Dashboard
+
+Track B uses the CoinGecko simple price API to monitor live cryptocurrency prices in USD for:
 
 - Bitcoin (BTC)
 - Ethereum (ETH)
 - Solana (SOL)
 
-The dashboard refreshes every 30 seconds to reduce rate-limit risk while still providing a real-time monitoring experience suitable for a student project. It stores recent observations in a CSV file, keeps approximately the last 15 minutes of data, and uses cached data if CoinGecko temporarily fails or returns a rate-limit response.
+The dashboard is implemented with Streamlit and refreshes every 30 seconds. It stores recent observations in `live_crypto_data.csv` and keeps approximately the last 15 minutes of data.
 
-The metric cards show raw USD prices. The main rolling chart uses normalized percentage change from the start of the current window so BTC, ETH, and SOL can be compared on the same chart without smaller-price assets appearing flat.
+The dashboard includes raw price metric cards, connection status, last updated timestamp, a normalized rolling percentage-change line chart, and a Bitcoin alert. The normalized chart makes BTC, ETH, and SOL easier to compare on the same axis.
 
-## Folder Structure
-
-```text
-data-visualization-final-project/
-|
-|-- track_a_social_network/
-|   |-- github_network.py
-|   |-- data/
-|   |   |-- raw_contributors.csv
-|   |   |-- edge_list.csv
-|   |   `-- node_table.csv
-|   `-- outputs/
-|       |-- github_network.html
-|       `-- github_network.png
-|
-|-- track_b_realtime_dashboard/
-|   |-- app.py
-|   `-- data/
-|       `-- live_crypto_data.csv
-|
-|-- report/
-|   |-- technical_report.md
-|   |-- visualization_design_document.md
-|   `-- final_validation_checklist.md
-|
-|-- requirements.txt
-|-- README.md
-`-- .gitignore
-```
+The alert triggers if Bitcoin drops more than 2% over approximately 5 minutes. If the CoinGecko API fails or returns a rate-limit error, the dashboard uses cached CSV data instead of crashing.
 
 ## Technologies Used
 
 - Python
-- pandas
-- requests
+- Pandas
 - NetworkX
-- python-louvain
+- Louvain community detection
 - PyVis
 - Matplotlib
 - Streamlit
 - Plotly
-- streamlit-autorefresh
+- Requests
 
-## Setup Instructions
+## Installation Instructions
 
-Run all commands from the project root:
-
-```powershell
-cd D:\data-visualization-final-project
-```
-
-Create and activate a virtual environment:
+From the project root, create a virtual environment:
 
 ```powershell
 python -m venv venv
+```
+
+Activate the virtual environment:
+
+```powershell
 venv\Scripts\activate
 ```
 
-## Install Dependencies
-
-Install the required Python packages:
+Install the required dependencies:
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## Run Track A
+## How to Run Track A
 
-Run the GitHub network analysis script:
+Run the GitHub network script from the project root:
+
+```powershell
+python track_a_social_network/github_network.py
+```
+
+On Windows PowerShell, this command also works:
 
 ```powershell
 python track_a_social_network\github_network.py
 ```
 
-The script will:
+## How to Run Track B
 
-- collect GitHub contributor data
-- save `raw_contributors.csv`
-- build `edge_list.csv`
-- build and update `node_table.csv`
-- calculate degree centrality and betweenness centrality
-- apply Louvain community detection
-- export the interactive HTML network
-- export the static PNG network
-
-Optional GitHub token support is available to reduce rate-limit issues:
+Run the Streamlit dashboard from the project root:
 
 ```powershell
-$env:GITHUB_TOKEN="your_token_here"
-python track_a_social_network\github_network.py
+streamlit run track_b_realtime_dashboard/app.py
 ```
 
-## Run Track B
-
-Run the Streamlit dashboard:
+On Windows PowerShell, this command also works:
 
 ```powershell
 streamlit run track_b_realtime_dashboard\app.py
 ```
 
-The dashboard opens in a browser and refreshes every 30 seconds.
-
 ## Output Files
 
-Track A output files:
+Track A:
 
 - `track_a_social_network/data/raw_contributors.csv`
 - `track_a_social_network/data/edge_list.csv`
@@ -179,51 +125,40 @@ Track A output files:
 - `track_a_social_network/outputs/github_network.html`
 - `track_a_social_network/outputs/github_network.png`
 
-Track B output file:
+Track B:
 
 - `track_b_realtime_dashboard/data/live_crypto_data.csv`
 
-Report files:
+Reports:
 
 - `report/technical_report.md`
 - `report/visualization_design_document.md`
 - `report/final_validation_checklist.md`
 
-## API Reliability Notes
+## API Notes
 
-This project depends on live public APIs. Data and output files may vary depending on API availability, rate limits, repository activity, and the time of execution.
+The project depends on live public APIs, so data may vary between runs.
 
 GitHub API notes:
 
-- Track A uses the GitHub REST API contributors endpoint.
-- Some repositories may return temporary timeout errors.
-- The script retries requests and skips failed repositories gracefully.
-- A GitHub token is optional but recommended.
+- The GitHub API may occasionally timeout, especially for large repositories.
+- The Track A script retries failed requests and skips repositories that continue to fail.
+- Partial data is saved if at least one repository succeeds.
+- A GitHub token can be set with `GITHUB_TOKEN` to reduce rate-limit issues.
 
 CoinGecko API notes:
 
-- Track B uses the free CoinGecko simple price API.
-- The dashboard polls every 30 seconds to reduce rate-limit risk.
-- If CoinGecko returns `429 Too Many Requests` or another API error, the dashboard keeps existing CSV data and displays cached data instead of crashing.
-- Cached data should be interpreted as the most recent stored observation, not a fresh API response.
+- CoinGecko may occasionally return rate-limit errors such as `429 Too Many Requests`.
+- The Track B dashboard handles these errors gracefully.
+- If the API fails, the dashboard keeps existing data and displays cached observations.
+- Cached data should not be interpreted as a fresh API response.
 
-## Group Members
+## Submission Package Checklist
 
-- Student 1:
-- Student 2:
-- Student 3:
-
-## Submission Checklist
-
-- [ ] Dependencies are installed from `requirements.txt`.
-- [ ] Track A script runs successfully.
-- [ ] Track A CSV files are generated.
-- [ ] Track A interactive HTML visualization is generated.
-- [ ] Track A static PNG visualization is generated.
-- [ ] Track B Streamlit dashboard runs successfully.
-- [ ] Track B live data CSV is generated.
-- [ ] Technical report is completed.
-- [ ] Visualization design document is completed.
-- [ ] Final validation checklist is completed.
-- [ ] Group member names are added.
-- [ ] Generated outputs are reviewed before submission.
+- [ ] Technical_Report.pdf
+- [ ] Source code
+- [ ] README.md
+- [ ] Output files
+- [ ] Dashboard screenshot or screen recording if needed
+- [ ] Group member names filled in
+- [ ] Final outputs reviewed before submission

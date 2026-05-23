@@ -1,34 +1,63 @@
 # Final Validation Checklist
 
-This checklist validates the project against the assignment requirements using the current repository files and generated outputs.
+This checklist reviews the repository against the assignment submission requirements.
 
-| Requirement | Status | Evidence file/path | Notes |
+## Submission Package
+
+| Requirement | Status | Evidence | Notes |
 | --- | --- | --- | --- |
-| Track A completed | Complete | `track_a_social_network/github_network.py` | Includes data collection, edge/node table creation, network analysis, and visualizations. |
-| Track B completed | Complete | `track_b_realtime_dashboard/app.py` | Includes live API polling, metrics, charting, status display, and alerting. |
-| Edge list exists | Complete | `track_a_social_network/data/edge_list.csv` | Generated developer-developer edge list with shared repository weights. |
-| Node table exists | Complete | `track_a_social_network/data/node_table.csv` | Generated node table with developer attributes and network metrics. |
-| Community detection exists | Complete | `track_a_social_network/github_network.py` | Louvain detection implemented with `community_louvain.best_partition(...)`. |
-| Node size uses centrality | Complete | `track_a_social_network/github_network.py` | Degree centrality is mapped to node size in PyVis and Matplotlib visualizations. |
-| Communities use color | Complete | `track_a_social_network/github_network.py` | Louvain community IDs are mapped through `get_community_color(...)`. |
-| Layout justification exists | Complete | `report/technical_report.md` | Section 11 explains the force-directed layout. Code comments also justify force-directed layouts. |
-| Interactive/static visualization exists | Complete | `track_a_social_network/outputs/github_network.html`; `track_a_social_network/outputs/github_network.png` | Both interactive HTML and static PNG outputs are present. |
-| Live API integration exists | Complete | `track_b_realtime_dashboard/app.py` | Uses CoinGecko simple price REST API. |
-| Sliding window chart exists | Complete | `track_b_realtime_dashboard/app.py` | Uses Plotly line chart and keeps recent observations per coin. |
-| Alert threshold exists | Complete | `track_b_realtime_dashboard/app.py` | BTC alert threshold is set to a drop of more than 2% over approximately five minutes. |
-| Last updated timestamp exists | Complete | `track_b_realtime_dashboard/app.py` | `render_status(...)` displays the last updated timestamp. |
-| Connection status exists | Complete | `track_b_realtime_dashboard/app.py` | Dashboard shows live or API unavailable status. |
-| Source code exists | Complete | `track_a_social_network/github_network.py`; `track_b_realtime_dashboard/app.py` | Both track source files are present. |
-| README exists | Complete | `README.md` | Project overview, setup, run instructions, outputs, and checklist are included. |
-| Technical report exists | Complete | `report/technical_report.md` | Full technical report with Track A and Track B methodology is present. |
-| Submission package ready | Complete | Project root | Required code, reports, README, requirements, generated Track A outputs, and Track B data file are present. |
+| Technical Report PDF exists | Complete | `report/technical_report.pdf` | PDF file is present in the report folder. |
+| Executive summary of both projects exists | Complete | `report/technical_report.md` | Section 1 summarizes Track A and Track B. |
+| Visualization Design Document exists | Complete | `report/visualization_design_document.md` | Separate design document is present. |
+| User Persona exists | Complete | `report/technical_report.md`; `report/visualization_design_document.md` | Persona is included in both report documents. |
+| Visual Encoding mappings exist | Complete | `report/technical_report.md`; `report/visualization_design_document.md` | Track A and Track B mappings are documented. |
+| Track A community interpretation exists | Partial | `report/technical_report.md` | Community narrative section exists, but final community values should be copied from generated outputs. |
+| Track B live trend interpretation exists | Complete | `report/technical_report.md`; `track_b_realtime_dashboard/app.py` | Report explains rolling trend monitoring; dashboard uses normalized percentage-change chart. |
+| Source code is organized | Complete | `track_a_social_network/`; `track_b_realtime_dashboard/`; `report/` | Project is separated by track and report folders. |
+| Source code is commented | Complete | `track_a_social_network/github_network.py`; `track_b_realtime_dashboard/app.py` | Comments explain API handling, projection logic, visual encodings, caching, and chart normalization. |
+| README includes group members | Complete | `README.md` | Four group member placeholders are included. |
+| README includes run/view instructions | Complete | `README.md` | Track A and Track B run commands are included. |
 
-## Remaining Issues
+## Track A
 
-No assignment-blocking issues were found in the current repository validation.
+| Requirement | Status | Evidence | Notes |
+| --- | --- | --- | --- |
+| Social network visualization exists | Complete | `track_a_social_network/outputs/github_network.html`; `track_a_social_network/outputs/github_network.png` | Interactive and static network visualizations are present. |
+| Edge list exists | Complete | `track_a_social_network/data/edge_list.csv` | Edge list CSV is present. |
+| Node table exists | Complete | `track_a_social_network/data/node_table.csv` | Node table CSV is present. |
+| Community detection exists | Complete | `track_a_social_network/github_network.py` | Louvain community detection is implemented with edge weights. |
+| Node color represents community | Complete | `track_a_social_network/github_network.py` | Community IDs are mapped to node colors. |
+| Node size represents centrality | Complete | `track_a_social_network/github_network.py` | Degree centrality is mapped to node size. |
+| Edge weight is defined | Complete | `track_a_social_network/github_network.py`; `track_a_social_network/data/edge_list.csv` | Edge weight is the number of shared repositories. |
+| Layout justification exists | Complete | `report/technical_report.md`; `track_a_social_network/github_network.py` | Force-directed layout is explained in the report and comments. |
+| Key actors are identified | Partial | `report/technical_report.md`; `track_a_social_network/data/node_table.csv` | Key actor section exists, but final names should be filled from `node_table.csv`. |
+| Weak link or bridge analysis exists | Partial | `report/technical_report.md`; `track_a_social_network/data/edge_list.csv` | Bridge analysis section exists, but final bridge actors and values should be filled from outputs. |
 
-## Non-Blocking Notes
+## Track B
 
-- The final report still contains placeholders such as `[insert top developer from node_table.csv]`. These should be filled manually after confirming the final generated CSV values.
-- API-based outputs can change over time because GitHub and CoinGecko data are live sources.
-- The local repository includes generated files and a virtual environment directory. The `.gitignore` excludes `venv/` and Python cache files for submission hygiene.
+| Requirement | Status | Evidence | Notes |
+| --- | --- | --- | --- |
+| Real-time API integration exists | Complete | `track_b_realtime_dashboard/app.py` | Uses CoinGecko simple price REST API. |
+| Functional dashboard exists | Complete | `track_b_realtime_dashboard/app.py` | Streamlit dashboard implementation is present. |
+| Temporal chart exists | Complete | `track_b_realtime_dashboard/app.py` | Plotly rolling line chart is implemented. |
+| Sliding window exists | Complete | `track_b_realtime_dashboard/app.py` | Keeps approximately 15 minutes of data using 30 points per coin. |
+| Conditional alert exists | Complete | `track_b_realtime_dashboard/app.py` | BTC alert triggers on a drop greater than 2% over approximately 5 minutes. |
+| Last updated timestamp exists | Complete | `track_b_realtime_dashboard/app.py` | Dashboard displays last updated timestamp. |
+| Connection status exists | Complete | `track_b_realtime_dashboard/app.py` | Dashboard shows live or cached-data status. |
+| Live trend interpretation exists | Complete | `report/technical_report.md`; `track_b_realtime_dashboard/app.py` | Live trend is represented through normalized percentage-change chart and explained in the report. |
+
+## Evaluation Criteria
+
+| Requirement | Status | Evidence | Notes |
+| --- | --- | --- | --- |
+| Technical Implementation | Complete | `track_a_social_network/github_network.py`; `track_b_realtime_dashboard/app.py` | Both tracks include working Python implementations with API use, persistence, and output generation. |
+| Design & Aesthetics | Complete | `report/visualization_design_document.md`; output visualizations | Visual encodings, label management, color use, alert design, and cognitive load strategies are documented. |
+| Analytical Depth | Partial | `report/technical_report.md`; generated CSV files | Methods are documented, but final report placeholders for exact Track A actors and communities should be filled before submission. |
+
+## Remaining Items Before Submission
+
+- Fill final Track A community, key actor, and bridge-analysis placeholders in `report/technical_report.md`.
+- Confirm the exported PDF reflects the final updated report text.
+- Add real group member names in `README.md`.
+
+The project is ready for final submission if all evidence files are present and the PDF report has been exported.
